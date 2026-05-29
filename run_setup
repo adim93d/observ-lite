@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${SCRIPT_DIR}"
+DEFAULT_REMOTE="git@github.com:adim93d/observ-lite.git"
+LOCAL_LOG_DIR="${OBSERV_LITE_LOG_DIR:-./logs}"
+COMMIT_MESSAGE="${COMMIT_MESSAGE:-Update observ-lite setup}"
+
+cd "${REPO_ROOT}"
+
+log() {
+  printf '\n==> %s\n' "$1"
+}
+
+log "Preparing observ-lite scripts"
+chmod +x scripts/*.sh
+chmod +x run_setup
+
+log "Checking Python syntax"
+python3 -m compileall -q src
+
+log "Running collector once"
+if PYTHONPATH=src python3 -m observ_lite.main run-once; then
+  log "Collector wrote to default log directory"
+else
+  log "Default log directory was not writable; using ${LOCAL_LOG_DIR}"
+  OBSERV_LITE_LOG_DIR="${LOCAL_LOG_DIR}" PYTHONPATH=src python3 -m observ_lite.main run-once
+fi
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GIT_CMD=(git)
+else
+  log "Normal .git directory is unavailable; using .git-real"
+  if [[ ! -d "${REPO_ROOT}/.git-real" ]]; then
+    git --git-dir="${REPO_ROOT}/.git-real" --work-tree="${REPO_ROOT}" init -b main
+  fi
+  GIT_CMD=(git --git-dir="${REPO_ROOT}/.git-real" --work-tree="${REPO_ROOT}")
+fi
+
+git_run() {
+  "${GIT_CMD[@]}" "$@"
+}
+
+if ! git_run rev-parse --verify HEAD >/dev/null 2>&1; then
+  git_run checkout -B main
+fi
+
+log "Configuring GitHub remote"
+if git_run remote get-url origin >/dev/null 2>&1; then
+  if [[ -n "${GITHUB_REMOTE:-}" ]]; then
+    git_run remote set-url origin "${GITHUB_REMOTE}"
+  fi
+else
+  git_run remote add origin "${GITHUB_REMOTE:-${DEFAULT_REMOTE}}"
+fi
+
+log "Staging project files"
+git_run add \
+  .gitignore \
+  README.md \
+  requirements.txt \
+  config \
+  docs \
+  logrotate \
+  scripts \
+  src \
+  systemd \
+  run_setup
+
+if git_run diff --cached --quiet; then
+  log "No changes to commit"
+else
+  log "Creating commit"
+  git_run commit -m "${COMMIT_MESSAGE}"
+fi
+
+current_branch="$(git_run symbolic-ref --short HEAD)"
+
+log "Pushing ${current_branch} to GitHub"
+git_run push -u origin "${current_branch}"
+
+log "Done"
+git_run status --short --branch
+
