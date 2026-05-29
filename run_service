@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${SCRIPT_DIR}"
+SERVICE_NAME="observ-lite.service"
+LOCAL_LOG_DIR="${OBSERV_LITE_LOG_DIR:-./logs}"
+
+cd "${REPO_ROOT}"
+
+log() {
+  printf '\n==> %s\n' "$1"
+}
+
+has_systemd_service() {
+  command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}" >/dev/null 2>&1
+}
+
+run_systemd_service() {
+  log "Starting ${SERVICE_NAME}"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    systemctl start "${SERVICE_NAME}"
+  else
+    sudo systemctl start "${SERVICE_NAME}"
+  fi
+
+  log "Service status"
+  systemctl status "${SERVICE_NAME}" --no-pager
+}
+
+run_local_once() {
+  log "${SERVICE_NAME} is not installed; running collector locally"
+  if PYTHONPATH=src python3 -m observ_lite.main run-once; then
+    log "Collector wrote to default log directory"
+  else
+    log "Default log directory was not writable; using ${LOCAL_LOG_DIR}"
+    OBSERV_LITE_LOG_DIR="${LOCAL_LOG_DIR}" PYTHONPATH=src python3 -m observ_lite.main run-once
+  fi
+}
+
+if has_systemd_service; then
+  run_systemd_service
+else
+  run_local_once
+fi
+
