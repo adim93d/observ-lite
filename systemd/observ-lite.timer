@@ -1,0 +1,12 @@
+[Unit]
+Description=Run observ-lite collector every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=observ-lite.service
+
+[Install]
+WantedBy=timers.target
+

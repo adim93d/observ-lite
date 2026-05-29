@@ -1,0 +1,10 @@
+[Unit]
+Description=observ-lite hardware and OS snapshot collector
+Documentation=file:/opt/observ-lite/README.md
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/observ-lite
+Environment=PYTHONPATH=/opt/observ-lite/src
+ExecStart=/usr/bin/python3 -m observ_lite.main run-once
+

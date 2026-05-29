@@ -1,0 +1,2 @@
+# observ-lite currently uses only the Python standard library.
+
